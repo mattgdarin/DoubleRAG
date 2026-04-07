@@ -66,6 +66,7 @@ class RAGAgent(Agent):
         # Step 1: load index
         index = yaml.safe_load(self._index_path.read_text())
         topics = index.get("topics", {})
+        recent_history = self._chat_history[-6:]  # last 3 exchanges (6 messages)
 
         # Step 2: find relevant topics
         topic_message = {"role": "user", "content": (
@@ -74,7 +75,7 @@ class RAGAgent(Agent):
             "Which topics are relevant to this query? Reply with a JSON array of topic keys, e.g. [\"machine_learning\"]. "
             "If none are relevant, reply with []."
         )}
-        relevant_topics = json.loads(self._send([topic_message]))
+        relevant_topics = json.loads(self._send(recent_history + [topic_message]))
 
         # Step 3: find relevant children per topic
         relevant_children: dict[str, list[str]] = {}
@@ -87,7 +88,7 @@ class RAGAgent(Agent):
                 "Which children are relevant to this query? Reply with a JSON array of child keys. "
                 "If none are relevant, reply with []."
             )}
-            relevant_children[topic_key] = json.loads(self._send([child_message]))
+            relevant_children[topic_key] = json.loads(self._send(recent_history + [child_message]))
 
         # Step 4: read files
         context_parts: list[str] = []
@@ -161,11 +162,20 @@ class RAGAgent(Agent):
             "Does the context contain enough information to answer the query? Reply with 'yes' or 'no'."
         )}]).strip().lower()
 
+        used_web = False
         if sufficient != "yes":
-            return RAGResponse(
-                answer="The knowledge base has some related content but not enough to answer this confidently.",
-                sources=sources,
-            )
+            print("[DoubleRAG] Insufficient context in knowledge base. Search the web? (yes/no): ", end="", flush=True)
+            if input().strip().lower() == "yes":
+                context, sources = self._search_web(query)
+                used_web = bool(sources)
+            else:
+                return RAGResponse(
+                    answer="The knowledge base has some related content but not enough to answer this confidently.",
+                    sources=sources,
+                )
+            
+        
+
 
         prefs_block = (
             "\n\nUser preferences:\n" + "\n".join(f"- {p}" for p in self._user_preferences)
@@ -180,8 +190,67 @@ class RAGAgent(Agent):
         self._chat_history.append(user_message)
         self._chat_history.append({"role": "assistant", "content": answer})
 
-        if len(self._chat_history) % 3 == 0:
-            self._add_context(self._chat_history[-5:])
+        if used_web:
+            print(
+                "\n[DoubleRAG] Web content was used to answer this query. "
+                "Would you like to ingest it into the knowledge base for future use? "
+                "Note: ingestion may take a while and be expensive — only recommended if this content will be regularly useful. (yes/no): ",
+                end="", flush=True
+            )
+            if input().strip().lower() == "yes":
+                import tempfile, os
+                for source in sources:
+                    if source.startswith("[web]"):
+                        url = source[len("[web]"):].strip()
+                        web_text = next(
+                            (p.replace(f"[WEB] {url}\n", "") for p in context.split("\n\n---\n\n") if p.startswith(f"[WEB] {url}")),
+                            None
+                        )
+                        if web_text:
+                            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as tmp:
+                                tmp.write(web_text)
+                                tmp_path = tmp.name
+                            try:
+                                self._ingestion_agent.ingest(tmp_path)
+                            finally:
+                                os.unlink(tmp_path)
+
+        if len(self._chat_history) % 6 == 0:
+            self._add_context(self._chat_history[-10:])
 
         return RAGResponse(answer=answer, sources=sources)
+
+    def _search_web(self, query: str) -> tuple[str, list[str]]:
+        response = self._client.messages.create(
+            model=self._model,
+            system=self._system_prompt,
+            messages=[{"role": "user", "content": query}],
+            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            max_tokens=4096,
+        )
+
+        context_parts: list[str] = []
+        sources: list[str] = []
+        recent_history = self._chat_history[-6:]
+        formatted_history = "\n".join(
+            f"{msg['role'].capitalize()}: {msg['content']}" for msg in recent_history
+        )
+
+        for block in response.content:
+            if block.type == "web_search_tool_result":
+                for result in block.content:
+                    if result.type == "web_search_result":
+                        relevance_prompt = (
+                            f"Recent conversation:\n{formatted_history}\n\n"
+                            f"Current query: {query}\n\n"
+                            f"Web result URL: {result.url}\n"
+                            f"Web result title: {result.title}\n\n"
+                            "Is this web result relevant to the query and conversation context? Reply with 'yes' or 'no'."
+                        )
+                        is_relevant = self._send([{"role": "user", "content": relevance_prompt}]).strip().lower()
+                        if is_relevant == "yes":
+                            context_parts.append(f"[WEB] {result.url}\n{result.encrypted_content}")
+                            sources.append(f"[web] {result.url}")
+
+        return "\n\n---\n\n".join(context_parts), sources
         
