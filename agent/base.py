@@ -32,3 +32,18 @@ class Agent:
             **kwargs,
         )
         return response.content[0].text
+
+    def _stream(self, messages: list, max_tokens: int = 4096, **kwargs) -> str:
+        full_text = ""
+        with self._client.messages.stream(
+            model=self._model,
+            system=self._system_prompt,
+            messages=messages,
+            max_tokens=max_tokens,
+            **kwargs,
+        ) as stream:
+            for chunk in stream.text_stream:
+                print(chunk, end="", flush=True)
+                full_text += chunk
+        print()
+        return full_text

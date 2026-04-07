@@ -50,6 +50,10 @@ class RAGAgent(Agent):
 
     def add_file(self, file_path: str) -> None:
         self._ingestion_agent.ingest(file_path)
+    
+    def clear_history(self) -> None:
+        self.chat_history = []
+
 
     def add_dir(self, dir_path: str) -> None:
         for path in sorted(Path(dir_path).rglob("*")):
@@ -97,9 +101,31 @@ class RAGAgent(Agent):
 
     def respond(self, query: str) -> RAGResponse:
         context, sources = self._get_context(query)
-        answer = self._send([{"role": "user", "content": (
+
+        if not context:
+            return RAGResponse(
+                answer="I don't have any information on that topic in the knowledge base.",
+                sources=[],
+            )
+
+        sufficient = self._send([{"role": "user", "content": (
+            f"Context:\n{context}\n\n"
+            f"Query: {query}\n\n"
+            "Does the context contain enough information to answer the query? Reply with 'yes' or 'no'."
+        )}]).strip().lower()
+
+        if sufficient != "yes":
+            return RAGResponse(
+                answer="The knowledge base has some related content but not enough to answer this confidently.",
+                sources=sources,
+            )
+
+        user_message = {"role": "user", "content": (
             f"Context:\n{context}\n\n"
             f"Query: {query}"
-        )}])
+        )}
+        answer = self._stream(self._chat_history + [user_message])
+        self._chat_history.append(user_message)
+        self._chat_history.append({"role": "assistant", "content": answer})
         return RAGResponse(answer=answer, sources=sources)
         
