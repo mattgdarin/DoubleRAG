@@ -32,6 +32,7 @@ class RAGAgent(Agent):
         self,
         api_key: str,
         model_name: str,
+        user_preferences: [],
         knowledge_dir: str,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         chat_history: Optional[list] = None,
@@ -39,6 +40,7 @@ class RAGAgent(Agent):
         ingestion_system_prompt: Optional[str] = None,
     ):
         super().__init__(api_key, model_name, system_prompt, chat_history)
+        self._user_preferences: list[str] = list(user_preferences) if user_preferences else []
         self._knowledge_dir = Path(knowledge_dir)
         self._index_path = self._knowledge_dir / ".index.yaml"
         self._ingestion_agent = IngestionAgent(
@@ -99,6 +101,51 @@ class RAGAgent(Agent):
 
         return "\n\n---\n\n".join(context_parts), sources
 
+    def _add_context(self, recent_history: list) -> None:
+        formatted = "\n".join(
+            f"{msg['role'].capitalize()}: {msg['content']}" for msg in recent_history
+        )
+        decision = self._send([{"role": "user", "content": (
+            f"Here are the last few messages from a conversation:\n\n{formatted}\n\n"
+            "Does this conversation contain factual information or domain knowledge worth saving for future reference? "
+            "This includes technical facts, definitions, explanations, or context about the user's project or field. "
+            "Do NOT include personal preferences, stylistic choices, or how the user likes to communicate — only objective knowledge. "
+            "Reply with 'yes' or 'no', and if yes, briefly summarise the facts worth saving in at most three sentences."
+        )}]).strip()
+
+        if decision.lower().startswith("yes"):
+            summary = decision[decision.lower().find("yes") + 3:].strip().lstrip(",:").strip()
+            print(f"\n[DoubleRAG] This conversation contains potentially useful context: {summary}")
+            print("[DoubleRAG] Would you like to save this to the knowledge base? (yes/no): ", end="", flush=True)
+            if input().strip().lower() == "yes":
+                import tempfile, os
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as tmp:
+                    tmp.write(summary)
+                    tmp_path = tmp.name
+                try:
+                    self._ingestion_agent.ingest(tmp_path)
+                finally:
+                    os.unlink(tmp_path)
+
+        # --- Step 2: extract preferences ---
+        pref_decision = self._send([{"role": "user", "content": (
+            f"Here are the last few messages from a conversation:\n\n{formatted}\n\n"
+            "Does this conversation reveal personal preferences about how the user likes to work or communicate? "
+            "This includes things like: preferred response format, level of detail, tone, tools or frameworks they favour, "
+            "or how they like explanations structured. "
+            "Do NOT include factual or domain knowledge — only subjective preferences. "
+            "Reply with 'yes' or 'no', and if yes, state each preference as a short bullet point."
+        )}]).strip()
+
+        if pref_decision.lower().startswith("yes"):
+            prefs_text = pref_decision[pref_decision.lower().find("yes") + 3:].strip().lstrip(",:").strip()
+            new_prefs = [p.strip().lstrip("-•").strip() for p in prefs_text.splitlines() if p.strip()]
+            self._user_preferences.extend(new_prefs)
+            print(f"\n[DoubleRAG] New preferences detected: {new_prefs}")
+            print("[DoubleRAG] Would you like to save these preferences? (yes/no): ", end="", flush=True)
+        
+
+
     def respond(self, query: str) -> RAGResponse:
         context, sources = self._get_context(query)
 
@@ -120,12 +167,21 @@ class RAGAgent(Agent):
                 sources=sources,
             )
 
+        prefs_block = (
+            "\n\nUser preferences:\n" + "\n".join(f"- {p}" for p in self._user_preferences)
+            if self._user_preferences else ""
+        )
         user_message = {"role": "user", "content": (
             f"Context:\n{context}\n\n"
             f"Query: {query}"
+            f"{prefs_block}"
         )}
         answer = self._stream(self._chat_history + [user_message])
         self._chat_history.append(user_message)
         self._chat_history.append({"role": "assistant", "content": answer})
+
+        if len(self._chat_history) % 3 == 0:
+            self._add_context(self._chat_history[-5:])
+
         return RAGResponse(answer=answer, sources=sources)
         
