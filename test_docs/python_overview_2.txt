@@ -1,0 +1,8 @@
+Python is a dynamically typed, interpreted language created by Guido van Rossum and first released in 1991.
+It emphasizes code readability and simplicity, making it popular for beginners and experts alike.
+
+Python uses indentation to define code blocks, unlike most languages that use braces.
+This makes Python programs visually clean and enforces consistent formatting across the codebase.
+
+The Python Package Index (PyPI) hosts over 400,000 packages, making it one of the richest ecosystems in any programming language.
+pip is the standard tool for installing and managing these packages.

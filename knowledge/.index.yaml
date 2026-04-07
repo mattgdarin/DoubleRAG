@@ -1,0 +1,15 @@
+topics:
+  machine_learning_fundamentals:
+    children:
+      neural_networks_deep_learning:
+        label: neural_networks_deep_learning
+      overview_and_types:
+        label: overview and types
+    label: machine learning fundamentals
+  python_language_overview:
+    children:
+      python_functions_decorators:
+        label: python functions decorators
+      python_language_basics:
+        label: Python Language Basics
+    label: Python Language Overview

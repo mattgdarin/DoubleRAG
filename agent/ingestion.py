@@ -89,8 +89,36 @@ class IngestionAgent(Agent):
 
         return chunks
 
+    def _clean_key(self, raw: str) -> str:
+        return raw.strip().strip("`").strip()
+
+    def _send_with_retry(self, messages: list, valid_keys: set, label: str) -> str:
+        for attempt in range(2):
+            raw = self._send(messages).strip()
+            key = self._clean_key(raw)
+            if key == "none" or key in valid_keys:
+                return key
+            if attempt == 0:
+                messages = messages + [
+                    {"role": "assistant", "content": raw},
+                    {"role": "user", "content": (
+                        f"'{key}' is not a valid option. "
+                        f"Valid options are: {sorted(valid_keys)} or 'none'. "
+                        "Reply with just the key, no backticks or formatting."
+                    )},
+                ]
+        print(f"[warning] could not resolve {label} after 2 attempts, skipping chunk")
+        return "none"
+
+    def _read_file(self, file_path: Path) -> str:
+        if file_path.suffix.lower() == ".pdf":
+            from pypdf import PdfReader
+            reader = PdfReader(file_path)
+            return "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        return file_path.read_text(encoding="utf-8")
+
     def ingest(self, file_path: str) -> None:
-        text = Path(file_path).read_text(encoding="utf-8")
+        text = self._read_file(Path(file_path))
         chunks = self._chunk_text(text)
         index = yaml.safe_load(self._index_path.read_text())
         for chunk in chunks:
@@ -98,10 +126,10 @@ class IngestionAgent(Agent):
             topic_message = {"role": "user", "content": (
                 f"Given this list of existing topics: {list(index['topics'].keys())}\n\n"
                 f"And this chunk of text:\n{chunk}\n\n"
-                "Which single topic is this chunk most relevant to? Reply with just the topic key. "
+                "Which single topic is this chunk most relevant to? Reply with just the topic key, no backticks or formatting. "
                 "If none are sufficiently relevant, reply with 'none'."
             )}
-            topic_key = self._send([topic_message]).strip()
+            topic_key = self._send_with_retry([topic_message], set(index["topics"].keys()), "topic")
 
             if topic_key == "none":
                 new_topic_prompt = (
@@ -125,10 +153,10 @@ class IngestionAgent(Agent):
                 f"Topic: {topic_key}\n"
                 f"Existing children: {list(children.keys())}\n\n"
                 f"Chunk:\n{chunk}\n\n"
-                "Which single child is this chunk most relevant to? Reply with just the child key. "
+                "Which single child is this chunk most relevant to? Reply with just the child key, no backticks or formatting. "
                 "If none are sufficiently relevant, reply with 'none'."
             )}
-            child_key = self._send([child_message]).strip()
+            child_key = self._send_with_retry([child_message], set(children.keys()), "child")
 
             if child_key == "none":
                 new_child_prompt = (
