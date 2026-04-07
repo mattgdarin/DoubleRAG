@@ -1,0 +1,11 @@
+Python is a high-level, interpreted programming language known for its simple and readable syntax.
+It was created by Guido van Rossum and first released in 1991.
+
+Python supports multiple programming paradigms including procedural, object-oriented, and functional programming.
+It uses dynamic typing and automatic memory management through garbage collection.
+
+Python's standard library is extensive, covering areas like file I/O, networking, data formats, and more.
+The package ecosystem via PyPI contains hundreds of thousands of third-party libraries.
+
+Indentation is significant in Python — it defines block structure instead of braces.
+This enforces readable code style across all Python programs.
