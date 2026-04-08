@@ -84,3 +84,36 @@ This launches an interactive menu where you can:
 2. Add a file
 3. Add a directory
 4. Exit
+
+## Evaluation
+
+DoubleRAG includes an LLM-as-judge evaluation framework that benchmarks against a vanilla RAG baseline (chunking + vector search via ChromaDB).
+
+### Running the eval
+
+```bash
+python3 -m eval.compare
+```
+
+This will:
+1. Ingest the test documents into both DoubleRAG and VanillaRAG
+2. Run a set of queries against both systems
+3. Score each response using three judges: `AnswerJudge`, `SourceJudge`, and `IngestionJudge`
+4. Print a summary table and per-query breakdown
+
+### Test documents
+
+Place test documents in `test_docs/`. The eval currently uses a fictional company dataset (`test_docs/acme/`) with two documents covering company overview, financials, competitors, HR, and upcoming initiatives.
+
+To run a meaningful comparison, use documents with real overlap and redundancy — this stresses DoubleRAG's merge/dedup logic, which is its primary differentiator.
+
+### Early results
+
+Tested on 12 queries across simple factual, cross-document reasoning, inference, multi-hop, and negation question types:
+
+| Metric | DoubleRAG | VanillaRAG |
+|---|---|---|
+| Answer quality (avg /5) | 4.50 | 4.58 |
+| Source quality (avg /5) | 3.42 | 3.33 |
+
+Results are near-identical on a small 2-document dataset, which is expected — DoubleRAG's hierarchy and deduplication advantages emerge at scale with overlapping documents. A larger dataset with meaningful redundancy is the next step for evaluation. 
