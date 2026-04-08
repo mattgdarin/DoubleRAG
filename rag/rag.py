@@ -32,11 +32,11 @@ class RAGAgent(Agent):
         self,
         api_key: str,
         model_name: str,
-        user_preferences: [],
         knowledge_dir: str,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         chat_history: Optional[list] = None,
         ingestion_model: Optional[str] = None,
+        user_preferences: Optional[list] = None,
         ingestion_system_prompt: Optional[str] = None,
     ):
         super().__init__(api_key, model_name, system_prompt, chat_history)
@@ -75,7 +75,12 @@ class RAGAgent(Agent):
             "Which topics are relevant to this query? Reply with a JSON array of topic keys, e.g. [\"machine_learning\"]. "
             "If none are relevant, reply with []."
         )}
-        relevant_topics = json.loads(self._send(recent_history + [topic_message]))
+        try:
+            raw = self._send(recent_history + [topic_message]).strip().strip("`")
+            relevant_topics = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            print("[warning] could not parse topic response, defaulting to no topics")
+            relevant_topics = []
 
         # Step 3: find relevant children per topic
         relevant_children: dict[str, list[str]] = {}
@@ -88,7 +93,12 @@ class RAGAgent(Agent):
                 "Which children are relevant to this query? Reply with a JSON array of child keys. "
                 "If none are relevant, reply with []."
             )}
-            relevant_children[topic_key] = json.loads(self._send(recent_history + [child_message]))
+            try:
+                raw = self._send(recent_history + [child_message]).strip().strip("`")
+                relevant_children[topic_key] = json.loads(raw)
+            except (json.JSONDecodeError, ValueError):
+                print(f"[warning] could not parse child response for {topic_key}, skipping")
+                relevant_children[topic_key] = []
 
         # Step 4: read files
         context_parts: list[str] = []
@@ -151,28 +161,34 @@ class RAGAgent(Agent):
         context, sources = self._get_context(query)
 
         if not context:
-            return RAGResponse(
-                answer="I don't have any information on that topic in the knowledge base.",
-                sources=[],
-            )
-
-        sufficient = self._send([{"role": "user", "content": (
-            f"Context:\n{context}\n\n"
-            f"Query: {query}\n\n"
-            "Does the context contain enough information to answer the query? Reply with 'yes' or 'no'."
-        )}]).strip().lower()
-
-        used_web = False
-        if sufficient != "yes":
             print("[DoubleRAG] Insufficient context in knowledge base. Search the web? (yes/no): ", end="", flush=True)
             if input().strip().lower() == "yes":
                 context, sources = self._search_web(query)
                 used_web = bool(sources)
             else:
                 return RAGResponse(
-                    answer="The knowledge base has some related content but not enough to answer this confidently.",
-                    sources=sources,
+                    answer="I don't have any information on that topic in the knowledge base.",
+                    sources=[],
                 )
+        else:
+
+            sufficient = self._send([{"role": "user", "content": (
+                f"Context:\n{context}\n\n"
+                f"Query: {query}\n\n"
+                "Does the context contain enough information to answer the query? Reply with 'yes' or 'no'."
+            )}]).strip().lower()
+
+            used_web = False
+            if sufficient != "yes":
+                print("[DoubleRAG] Insufficient context in knowledge base. Search the web? (yes/no): ", end="", flush=True)
+                if input().strip().lower() == "yes":
+                    context, sources = self._search_web(query)
+                    used_web = bool(sources)
+                else:
+                    return RAGResponse(
+                        answer="The knowledge base has some related content but not enough to answer this confidently.",
+                        sources=sources,
+                    )
             
         
 
@@ -187,7 +203,7 @@ class RAGAgent(Agent):
             f"{prefs_block}"
         )}
         answer = self._stream(self._chat_history + [user_message])
-        self._chat_history.append(user_message)
+        self._chat_history.append({"role": "user", "content": query})
         self._chat_history.append({"role": "assistant", "content": answer})
 
         if used_web:
@@ -199,21 +215,21 @@ class RAGAgent(Agent):
             )
             if input().strip().lower() == "yes":
                 import tempfile, os
-                for source in sources:
-                    if source.startswith("[web]"):
-                        url = source[len("[web]"):].strip()
-                        web_text = next(
-                            (p.replace(f"[WEB] {url}\n", "") for p in context.split("\n\n---\n\n") if p.startswith(f"[WEB] {url}")),
-                            None
-                        )
-                        if web_text:
-                            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as tmp:
-                                tmp.write(web_text)
-                                tmp_path = tmp.name
-                            try:
-                                self._ingestion_agent.ingest(tmp_path)
-                            finally:
-                                os.unlink(tmp_path)
+                web_sources = [s[len("[web]"):].strip() for s in sources if s.startswith("[web]")]
+                summary = self._send([{"role": "user", "content": (
+                    f"You just answered this query using web search: {query}\n\n"
+                    f"Sources used: {web_sources}\n\n"
+                    "Write a clean, factual summary of the information you found from these sources. "
+                    "Write it as plain prose suitable for storing in a knowledge base. "
+                    "Do not include any encrypted content, URLs, or formatting artifacts."
+                )}])
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as tmp:
+                    tmp.write(summary)
+                    tmp_path = tmp.name
+                try:
+                    self._ingestion_agent.ingest(tmp_path)
+                finally:
+                    os.unlink(tmp_path)
 
         if len(self._chat_history) % 6 == 0:
             self._add_context(self._chat_history[-10:])
@@ -245,10 +261,10 @@ class RAGAgent(Agent):
                             f"Current query: {query}\n\n"
                             f"Web result URL: {result.url}\n"
                             f"Web result title: {result.title}\n\n"
-                            "Is this web result relevant to the query and conversation context? Reply with 'yes' or 'no'."
+                            "Is this web result relevant to the query and conversation context? Reply with one word: 'yes' or 'no'."
                         )
                         is_relevant = self._send([{"role": "user", "content": relevance_prompt}]).strip().lower()
-                        if is_relevant == "yes":
+                        if "yes" in is_relevant[:10]:
                             context_parts.append(f"[WEB] {result.url}\n{result.encrypted_content}")
                             sources.append(f"[web] {result.url}")
 
