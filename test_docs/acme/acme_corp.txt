@@ -1,0 +1,37 @@
+Acme Corp Overview
+Acme Corp was founded in 2008 by Sandra Okafor and James Whitfield in Austin, Texas.
+The company specializes in industrial water filtration systems for municipal and commercial clients.
+As of 2024, Acme Corp employs 340 full-time staff across three offices: Austin (HQ), Denver, and Toronto.
+
+Products and Services
+Acme Corp's flagship product is the ClearFlow 3000, a modular filtration unit capable of processing up to 500,000 gallons per day.
+The ClearFlow 3000 uses a patented three-stage filtration process: sediment removal, activated carbon treatment, and UV sterilization.
+Acme also offers the ClearFlow Lite for small commercial clients, processing up to 50,000 gallons per day.
+Installation, maintenance contracts, and 24/7 emergency support are bundled into Acme's ServiceShield plans.
+
+Financials
+Acme Corp reported $87 million in revenue for fiscal year 2023, up 14% from the prior year.
+Their largest revenue segment is recurring maintenance contracts, which account for 61% of total revenue.
+The company operates on a gross margin of approximately 42%.
+Acme closed a $25 million Series C funding round in early 2024 led by BlueWater Ventures.
+
+Clients and Markets
+Acme's top clients include the City of Denver Water Authority, a pharmaceutical manufacturer in Ontario, and three major hotel chains.
+The company primarily serves clients in the United States and Canada, with early-stage expansion into Mexico underway.
+Municipal contracts typically run 5-7 years and are renegotiated based on performance benchmarks.
+
+Operations
+Acme's Austin headquarters houses the R&D team, which consists of 45 engineers focused on next-generation filtration membranes.
+The Denver office manages sales and field operations for the western US.
+The Toronto office handles Canadian client relationships and regulatory compliance.
+Acme has a preferred supplier agreement with FilterTech Inc. for activated carbon media, renewed annually.
+
+Competitors
+Acme's main competitors are PureWave Systems, HydroShield, and municipal in-house operations.
+PureWave is larger, with approximately $210 million in revenue, but operates primarily in the Southeast US.
+Acme differentiates on modular design, faster installation time (typically 6 weeks vs. industry average of 14), and ServiceShield's guaranteed response times.
+
+Upcoming Initiatives
+Acme plans to launch the ClearFlow 5000 in Q3 2025, targeting large-scale industrial clients processing over 2 million gallons per day.
+The company is exploring a partnership with a European distributor to enter the German and Dutch markets by 2026.
+An internal AI monitoring system called AquaWatch is in development, designed to predict filter degradation and automate maintenance scheduling.

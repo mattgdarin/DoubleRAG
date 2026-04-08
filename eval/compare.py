@@ -1,6 +1,8 @@
 import os
 import json
 from dataclasses import dataclass
+from dotenv import load_dotenv
+load_dotenv()
 
 from rag import RAGAgent
 from vanilla_rag import VanillaRAG
@@ -9,17 +11,31 @@ from eval import AnswerJudge, SourceJudge
 API_KEY = os.environ["ANTHROPIC_API_KEY"]
 MODEL = "claude-sonnet-4-6"
 JUDGE_MODEL = "claude-haiku-4-5-20251001"  # cheaper model for judging
-DOCS_DIR = "test_docs"
-KNOWLEDGE_DIR = "knowledge_eval"  # separate from main knowledge dir
+DOCS_DIR = "test_docs/acme"
+KNOWLEDGE_DIR = "knowledge_eval"
 
 QUERIES = [
-    "What is Python and how does it handle code blocks?",
-    "What are the differences between supervised and unsupervised learning?",
-    "How do neural networks learn, and what role does backpropagation play?",
-    "What are decorators in Python and how are they used?",
-    "What is the difference between CNNs and RNNs?",
-    "How does Python's memory management work?",
-    "What are the main types of machine learning?",
+    # Simple factual
+    "Who founded Acme Corp and when?",
+    "What is the ClearFlow 3000 and how does it work?",
+    "What percentage of Acme's revenue comes from maintenance contracts?",
+    "What benefits does Acme Corp offer its employees?",
+
+    # Cross-document reasoning
+    "How does Acme's R&D team and product roadmap support their competitive differentiation against PureWave?",
+    "How do Acme's hiring practices and employee retention relate to their operational performance?",
+
+    # Inference
+    "Based on their expansion plans and current markets, what regions is Acme targeting by 2026?",
+    "What does Acme's revenue mix suggest about the stability of their business model?",
+
+    # Multi-hop
+    "Who leads the team responsible for developing AquaWatch, and what is their role at Acme?",
+    "Which executive joined from the firm that led Acme's most recent funding round?",
+
+    # Negation / absence
+    "Does Acme Corp currently operate in any markets outside North America?",
+    "Does Acme manufacture its own activated carbon media, or does it source it externally?",
 ]
 
 
@@ -70,14 +86,20 @@ def run_comparison():
         vanilla_response = vanilla_agent.respond(query)
 
         print("  Judging answers...")
+        from pathlib import Path
+        double_context = "\n\n---\n\n".join(
+            Path(KNOWLEDGE_DIR, s).read_text(encoding="utf-8")
+            for s in double_response.sources
+            if Path(KNOWLEDGE_DIR, s).exists()
+        )
         double_answer_score = answer_judge.score(
             query=query,
-            context="\n\n".join(double_response.sources),
+            context=double_context,
             answer=double_response.answer,
         )
         vanilla_answer_score = answer_judge.score(
             query=query,
-            context="\n\n".join(vanilla_response.sources),
+            context=vanilla_agent._last_context,
             answer=vanilla_response.answer,
         )
 

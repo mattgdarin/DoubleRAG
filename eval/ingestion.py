@@ -35,10 +35,14 @@ class IngestionJudge(Judge):
             for key in ("Preservation", "Deduplication", "Organisation", "Overall"):
                 if line.startswith(f"{key}:"):
                     try:
-                        scores[key] = int(line.split(":")[1].strip())
+                        scores[key] = round(float(line.split(":")[1].strip().split("/")[0].strip()))
                     except ValueError:
                         scores[key] = 0
             if line.startswith("Reasoning:"):
                 reasoning = line.split(":", 1)[1].strip()
+
+        if "Overall" not in scores:
+            dims = [scores[k] for k in ("Preservation", "Deduplication", "Organisation") if k in scores]
+            scores["Overall"] = round(sum(dims) / len(dims)) if dims else 0
 
         return JudgeScore(score=scores.get("Overall", 0), reasoning=reasoning)
