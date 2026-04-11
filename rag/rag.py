@@ -1,5 +1,6 @@
 import json
 import yaml
+import re
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field
@@ -76,7 +77,8 @@ class RAGAgent(Agent):
             "If none are relevant, reply with []."
         )}
         try:
-            raw = self._send(recent_history + [topic_message]).strip().strip("`")
+            raw = self._send(recent_history + [topic_message])
+            raw = re.sub(r"```[\w]*\n?", "", raw).strip()
             relevant_topics = json.loads(raw)
         except (json.JSONDecodeError, ValueError):
             print("[warning] could not parse topic response, defaulting to no topics")
@@ -94,7 +96,7 @@ class RAGAgent(Agent):
                 "If none are relevant, reply with []."
             )}
             try:
-                raw = self._send(recent_history + [child_message]).strip().strip("`")
+                raw = re.sub(r"```[\w]*\n?", "", self._send(recent_history + [child_message])).strip()
                 relevant_children[topic_key] = json.loads(raw)
             except (json.JSONDecodeError, ValueError):
                 print(f"[warning] could not parse child response for {topic_key}, skipping")
@@ -113,12 +115,16 @@ class RAGAgent(Agent):
         return "\n\n---\n\n".join(context_parts), sources
 
     def _add_context(self, recent_history: list) -> None:
+        user_messages = "\n".join(
+            msg['content'] for msg in recent_history if msg['role'] == 'user'
+        )
         formatted = "\n".join(
             f"{msg['role'].capitalize()}: {msg['content']}" for msg in recent_history
         )
         decision = self._send([{"role": "user", "content": (
-            f"Here are the last few messages from a conversation:\n\n{formatted}\n\n"
-            "Does this conversation contain factual information or domain knowledge worth saving for future reference? "
+            f"Here is a recent conversation:\n\n{formatted}\n\n"
+            "Does the user (not the assistant) share any factual information or domain knowledge worth saving for future reference? "
+            "Use the assistant's messages only for context to interpret what the user is saying. "
             "This includes technical facts, definitions, explanations, or context about the user's project or field. "
             "Do NOT include personal preferences, stylistic choices, or how the user likes to communicate — only objective knowledge. "
             "Reply with 'yes' or 'no', and if yes, briefly summarise the facts worth saving in at most three sentences."
@@ -175,8 +181,8 @@ class RAGAgent(Agent):
             sufficient = self._send([{"role": "user", "content": (
                 f"Context:\n{context}\n\n"
                 f"Query: {query}\n\n"
-                "Does the context contain enough information to answer the query? Reply with 'yes' or 'no'."
-            )}]).strip().lower()
+                "Does the context contain enough information to answer the query? Reply with only the single word 'yes' or 'no', nothing else."
+            )}]).strip().lower().strip("*.,!?")
 
             used_web = False
             if sufficient != "yes":
@@ -185,10 +191,7 @@ class RAGAgent(Agent):
                     context, sources = self._search_web(query)
                     used_web = bool(sources)
                 else:
-                    return RAGResponse(
-                        answer="The knowledge base has some related content but not enough to answer this confidently.",
-                        sources=sources,
-                    )
+                    context = f"[Note: the knowledge base has limited information on this topic.] {context}"
             
         
 
