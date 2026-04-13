@@ -1,16 +1,9 @@
 import os
 from rag import RAGAgent
 
-API_KEY = os.environ["ANTHROPIC_API_KEY"]
 MODEL = "claude-sonnet-4-6"
 
-agent = RAGAgent(
-    api_key=API_KEY,
-    model_name=MODEL,
-    knowledge_dir="knowledge",
-)
-
-def query_mode():
+def query_mode(agent: RAGAgent):
     print("\nEntering query mode. Type 'exit' to return to the main menu.\n")
     while True:
         try:
@@ -22,11 +15,12 @@ def query_mode():
         if query.lower() == "exit":
             break
         response = agent.respond(query)
-        print(f"\Answer: {response.answer}\n")
         print(f"\nSources: {response.sources}\n")
 
 def main():
     print("Welcome to DoubleRAG.")
+    api_key = input("Enter your Anthropic API key: ").strip()
+    agent = RAGAgent(api_key=api_key, model_name=MODEL, knowledge_dir="knowledge")
     while True:
         print("\n  1. Query")
         print("  2. Add file")
@@ -35,7 +29,7 @@ def main():
         choice = input("\nChoice: ").strip()
 
         if choice == "1":
-            query_mode()
+            query_mode(agent)
 
         elif choice == "2":
             path = input("File path: ").strip()
