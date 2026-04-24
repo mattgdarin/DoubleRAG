@@ -19,6 +19,7 @@ When answering a query:
 2. Read the files most likely to contain the answer.
 3. If needed, read additional files to fill gaps.
 4. Answer concisely, citing the source files you used.
+5. If sources contain conflicting information on the same topic, explicitly note the conflict and cite both sources.
 '''
 
 

@@ -118,6 +118,7 @@ class IngestionAgent(Agent):
         return file_path.read_text(encoding="utf-8")
 
     def ingest(self, file_path: str) -> None:
+        source_name = Path(file_path).name
         text = self._read_file(Path(file_path))
         chunks = self._chunk_text(text)
         index = yaml.safe_load(self._index_path.read_text())
@@ -201,6 +202,7 @@ class IngestionAgent(Agent):
                             "Rewrite the file incorporating the new chunk. "
                             "Eliminate redundancy. Preserve all unique information. "
                             "Keep the existing YAML frontmatter, updating merged_from if needed. "
+                            f"Where you incorporate content from the new chunk, append an inline citation: *(Source: {source_name})*. "
                             "Reply with only the file contents."
                         )},
                     ])
@@ -215,14 +217,14 @@ class IngestionAgent(Agent):
                         )},
                     ]).strip()
                     file_key = re.sub(r"[^a-z0-9]+", "_", file_label.lower()).strip("_")
-                    (child_dir / f"{file_key}.md").write_text(chunk, encoding="utf-8")
+                    (child_dir / f"{file_key}.md").write_text(chunk + f"\n\n*(Source: {source_name})*", encoding="utf-8")
             else:
                 file_label = self._send([{"role": "user", "content": (
                     f"Propose a concise filename (2-4 words, no extension) for this chunk:\n{chunk}\n\n"
                     "Reply with just the name."
                 )}]).strip()
                 file_key = re.sub(r"[^a-z0-9]+", "_", file_label.lower()).strip("_")
-                (child_dir / f"{file_key}.md").write_text(chunk, encoding="utf-8")
+                (child_dir / f"{file_key}.md").write_text(chunk + f"\n\n*(Source: {source_name})*", encoding="utf-8")
 
         self._index_path.write_text(yaml.dump(index, allow_unicode=True))
 
